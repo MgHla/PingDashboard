@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-    <title>PulseView | Multi-Column Ping Dashboard + Alarm</title>
+    <title>PingCentral | Multi-Column Ping Dashboard + Alarm</title>
     <style>
         * {
             margin: 0;
@@ -195,6 +195,14 @@
             border-bottom: 1px solid var(--border-subtle);
         }
 
+        .host-title-group,
+        .host-stats {
+            display: flex;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 4px;
+        }
+
         .host-desc {
             font-family: var(--font-mono);
             font-weight: 400;
@@ -218,14 +226,53 @@
             font-weight: 600;
         }
 
+        .host-stat {
+            border: 1px solid var(--border-subtle);
+            border-radius: 30px;
+            color: var(--text-secondary);
+            font-size: 10px;
+            font-weight: 600;
+            padding: 4px 8px;
+            white-space: nowrap;
+        }
+
+        .host-stat.good {
+            border-color: rgba(46, 164, 79, 0.7);
+            color: #b9fbc0;
+        }
+
+        .host-stat.fair {
+            border-color: rgba(210, 153, 34, 0.75);
+            color: #ffd68a;
+        }
+
+        .host-stat.poor {
+            border-color: rgba(248, 81, 73, 0.75);
+            color: #ffc9c9;
+        }
+
         .terminal-panel {
             margin: 10px 12px 14px;
             background: #05080f;
             border-radius: 16px;
             border: 1px solid #2c313c;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .ping-graph {
+            position: absolute;
+            inset: 0;
+            height: 100%;
+            opacity: 0.6;
+            pointer-events: none;
+            width: 100%;
+            z-index: 10;
         }
 
         .cli-scroll {
+            position: relative;
+            z-index: 2;
             font-family: var(--font-mono);
             font-size: 11px;
             line-height: 1;
@@ -234,7 +281,7 @@
             overflow-y: auto;
             overflow-x: hidden;
             white-space: normal;
-            background: #01050c;
+            background: rgba(1, 5, 12, 0.72);
             scroll-behavior: smooth;
         }
 
@@ -340,7 +387,7 @@
 <header>
     <div class="top-row">
         <div class="title-section">
-            <h1>📡 PulseView</h1>
+            <h1>📡 PingCentral</h1>
             <div style="font-size: 10px; color: var(--text-secondary); margin-top: 2px;">
                 real-time ping dashboard | made with ❤ by MgHla
             </div>
@@ -400,6 +447,10 @@
     // Data state
     let currentHosts = [];         // store latest host list
     let terminalRefs = new Map();   // ip -> DOM element
+    let graphCanvasRefs = new Map(); // ip -> canvas element
+    let pingHistory = new Map();    // ip -> [{ value, error }]
+    let hostStatRefs = new Map();   // ip -> { quality, loss }
+    const PING_GRAPH_LIMIT = 60;
     
     // Alarm state (FIXED: simple boolean, no audio context locking issues)
     let alarmEnabled = true;
@@ -567,7 +618,7 @@
         });
         
         // Optionally persist in localStorage
-        localStorage.setItem('pulseview_columns', cols);
+        localStorage.setItem('PingCentral_columns', cols);
     }
     
     function setupColumnButtons() {
@@ -580,7 +631,7 @@
             });
         });
         // Load saved preference
-        const saved = localStorage.getItem('pulseview_columns');
+        const saved = localStorage.getItem('PingCentral_columns');
         if (saved) {
             const savedCols = parseInt(saved);
             if (savedCols >= 1 && savedCols <= 6) {
@@ -599,12 +650,14 @@
         if (!currentHosts || currentHosts.length === 0) {
             dashboardContainer.innerHTML = `<div class="skeleton-card" style="grid-column: 1/-1;">📭 No hosts received from backend. Check connection.</div>`;
             terminalRefs.clear();
+            graphCanvasRefs.clear();
             return;
         }
         
         // Clear container but preserve grid style
         dashboardContainer.innerHTML = '';
         terminalRefs.clear();
+        graphCanvasRefs.clear();
         
         currentHosts.forEach(host => {
             const ip = host.IPaddress;
@@ -622,9 +675,17 @@
                 <div class="host-ip"><span>🌐</span> ${escapeHtml(ip)}</div>
             `;
             
+            infoBar.insertAdjacentHTML('beforeend', `
+                <div class="host-stats">
+                    <span id="quality-${normalizedId}" class="host-stat">Q: --</span>
+                    <span id="loss-${normalizedId}" class="host-stat">L: 0</span>
+                </div>
+            `);
+
             const terminalPanel = document.createElement('div');
             terminalPanel.className = 'terminal-panel';
             terminalPanel.innerHTML = `
+                <canvas id="graph-${normalizedId}" class="ping-graph"></canvas>
                 <div id="term-${normalizedId}" class="cli-scroll">
                     <div class="ping-entry ping-info">⏳ monitoring ping stream...</div>
                 </div>
@@ -639,9 +700,174 @@
             if (scrollDiv) {
                 terminalRefs.set(ip, scrollDiv);
             }
+
+            const graphCanvas = document.getElementById(`graph-${normalizedId}`);
+            if (graphCanvas) {
+                graphCanvasRefs.set(ip, graphCanvas);
+                drawPingGraph(ip);
+            }
+
+            hostStatRefs.set(ip, {
+                quality: document.getElementById(`quality-${normalizedId}`),
+                loss: document.getElementById(`loss-${normalizedId}`)
+            });
+            updateHostStats(ip);
         });
     }
     
+    function extractPingLatency(line, isError, isSuccess) {
+        if (isError) {
+            return { value: null, error: true };
+        }
+        if (!isSuccess) {
+            return null;
+        }
+
+        const timeMatch = line.match(/time\s*([=<])\s*([0-9.]+)\s*ms/i);
+        if (!timeMatch) {
+            return { value: 1, error: false };
+        }
+
+        const value = parseFloat(timeMatch[2]);
+        if (!Number.isFinite(value)) {
+            return { value: 1, error: false };
+        }
+
+        return { value: timeMatch[1] === '<' ? Math.max(0.5, value) : value, error: false };
+    }
+
+    function addPingGraphSample(ip, sample) {
+        if (!sample) return;
+        const history = pingHistory.get(ip) || [];
+        history.push(sample);
+        while (history.length > PING_GRAPH_LIMIT) history.shift();
+        pingHistory.set(ip, history);
+        updateHostStats(ip);
+        drawPingGraph(ip);
+    }
+
+    function getHostQuality(history) {
+        if (!history.length) {
+            return { label: '--', level: '' };
+        }
+
+        const errors = history.filter(item => item.error).length;
+        const values = history.filter(item => !item.error && Number.isFinite(item.value)).map(item => item.value);
+        const lossRate = errors / history.length;
+        const avgLatency = values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : Infinity;
+
+        if (lossRate >= 0.2 || avgLatency >= 250 || values.length === 0) {
+            return { label: 'Poor', level: 'poor' };
+        }
+        if (lossRate >= 0.05 || avgLatency >= 100) {
+            return { label: 'Fair', level: 'fair' };
+        }
+        return { label: 'Good', level: 'good' };
+    }
+
+    function updateHostStats(ip) {
+        const refs = hostStatRefs.get(ip);
+        if (!refs) return;
+
+        const history = pingHistory.get(ip) || [];
+        const errors = history.filter(item => item.error).length;
+        const quality = getHostQuality(history);
+
+        if (refs.quality) {
+            refs.quality.textContent = `${quality.label}`;
+            refs.quality.className = `host-stat ${quality.level}`.trim();
+        }
+        if (refs.loss) {
+            refs.loss.textContent = `L: ${errors}`;
+            refs.loss.className = errors > 0 ? 'host-stat poor' : 'host-stat good';
+        }
+    }
+
+    function drawPingGraph(ip) {
+        const canvas = graphCanvasRefs.get(ip);
+        if (!canvas) return;
+
+        const panel = canvas.parentElement;
+        const width = Math.max(1, panel ? panel.clientWidth : canvas.clientWidth);
+        const height = Math.max(1, panel ? panel.clientHeight : canvas.clientHeight);
+        const scale = window.devicePixelRatio || 1;
+
+        if (canvas.width !== Math.floor(width * scale) || canvas.height !== Math.floor(height * scale)) {
+            canvas.width = Math.floor(width * scale);
+            canvas.height = Math.floor(height * scale);
+            canvas.style.width = `${width}px`;
+            canvas.style.height = `${height}px`;
+        }
+
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return;
+
+        ctx.setTransform(scale, 0, 0, scale, 0, 0);
+        ctx.clearRect(0, 0, width, height);
+
+        const history = pingHistory.get(ip) || [];
+        if (history.length < 2) return;
+
+        const paddingX = 8;
+        const paddingY = 10;
+        const graphWidth = Math.max(1, width - paddingX * 2);
+        const graphHeight = Math.max(1, height - paddingY * 2);
+        const values = history.filter(item => !item.error && Number.isFinite(item.value)).map(item => item.value);
+        const maxValue = Math.max(10, ...values) * 1.25;
+
+        ctx.font = '10px SF Mono, Fira Code, JetBrains Mono, monospace';
+        ctx.fillStyle = 'rgba(240, 243, 248, 0.62)';
+        ctx.fillText('Latency ms', paddingX, paddingY + 2);
+        ctx.fillStyle = 'rgba(139, 148, 158, 0.55)';
+        ctx.fillText(`${Math.round(maxValue)} ms`, Math.max(paddingX, width - paddingX - 44), paddingY + 2);
+
+        ctx.lineWidth = 1;
+        ctx.strokeStyle = 'rgba(138, 179, 255, 0.14)';
+        for (let i = 1; i <= 3; i++) {
+            const y = paddingY + (graphHeight / 4) * i;
+            ctx.beginPath();
+            ctx.moveTo(paddingX, y);
+            ctx.lineTo(width - paddingX, y);
+            ctx.stroke();
+        }
+
+        ctx.lineWidth = 2;
+        ctx.strokeStyle = 'rgba(46, 164, 79, 0.95)';
+        ctx.shadowBlur = 8;
+        ctx.shadowColor = 'rgba(46, 164, 79, 0.45)';
+
+        let drawing = false;
+        const xStepCount = Math.max(1, history.length - 1);
+        history.forEach((item, index) => {
+            const x = paddingX + (graphWidth * index) / xStepCount;
+            if (item.error || !Number.isFinite(item.value)) {
+                drawing = false;
+                return;
+            }
+
+            const clamped = Math.min(maxValue, Math.max(0, item.value));
+            const y = paddingY + graphHeight - (clamped / maxValue) * graphHeight;
+            if (!drawing) {
+                ctx.beginPath();
+                ctx.moveTo(x, y);
+                drawing = true;
+            } else {
+                ctx.lineTo(x, y);
+            }
+        });
+        if (drawing) ctx.stroke();
+
+        ctx.shadowBlur = 0;
+        history.forEach((item, index) => {
+            if (!item.error) return;
+            const x = paddingX + (graphWidth * index) / xStepCount;
+            ctx.fillStyle = 'rgba(248, 81, 73, 0.9)';
+            ctx.beginPath();
+            ctx.arc(x, paddingY + 3, 3, 0, Math.PI * 2);
+            ctx.fill();
+        });
+    }
+
     // Append ping line with error detection & alarm
     function appendPingLine(ip, rawLine) {
         const terminal = terminalRefs.get(ip);
@@ -651,6 +877,7 @@
         const isError = /(timeout|timed out|unreachable|100% loss|ttl expired|no route|failed|transmit failed|request timed out|destination host unreachable|failure|packet loss)/i.test(line);
         const isSuccess = /(time<|ttl=|bytes=|reply from|icmp_seq|rtt|time=)/i.test(line) && !isError;
         const isInfo = /(statistics|packets|minimum|maximum|average|pinging|round-trip|sent|received)/i.test(line);
+        addPingGraphSample(ip, extractPingLatency(line, isError, isSuccess));
         
         let escaped = escapeHtml(line);
         let className = 'ping-entry';
@@ -804,7 +1031,7 @@
             const val = parseInt(btn.getAttribute('data-col'));
             btn.classList.toggle('active', val === cols);
         });
-        localStorage.setItem('pulseview_columns', cols);
+        localStorage.setItem('PingCentral_columns', cols);
     };
     
     // Override original
@@ -825,7 +1052,7 @@
         setupAlarmToggle();
         bindColumnButtons();
         // load saved columns after buttons bound
-        const savedCols = localStorage.getItem('pulseview_columns');
+        const savedCols = localStorage.getItem('PingCentral_columns');
         if (savedCols) {
             const c = parseInt(savedCols);
             if (c >= 1 && c <= 6) superSetColumns(c);
@@ -836,6 +1063,9 @@
         // audio init with user unlock
         initAudio();
         setupAudioUnlock();
+        window.addEventListener('resize', () => {
+            currentHosts.forEach(host => drawPingGraph(host.IPaddress));
+        });
         
         // connect WebSocket
         connectWebSocket();
