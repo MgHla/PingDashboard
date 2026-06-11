@@ -27,7 +27,7 @@
 ## How to Run It
 To run this backend, you just need Node.js installed on your machine.
 
- **1.** Download server.js and index.html files.
+ **1.** Download server.js, index.html, and  pinginfo.csv files.
 
  **2.** Open your terminal/command prompt inside your project folder.
 
@@ -44,3 +44,5 @@ node server.js
 ```
 
  **5.** Open your browser and navigate to: http://localhost:3000
+
+ **Update Group, IPaddress, Description in pinginfo.csv file.**
