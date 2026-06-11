@@ -195,10 +195,10 @@
             border-bottom: 1px solid var(--border-subtle);
         }
 
-        .host-ip {
+        .host-desc {
             font-family: var(--font-mono);
-            font-weight: 600;
-            font-size: 12px;
+            font-weight: 400;
+            font-size: 10px;
             background: #0b0e14;
             padding: 4px 12px;
             border-radius: 40px;
@@ -208,13 +208,14 @@
             gap: 6px;
         }
 
-        .host-desc {
+
+        .host-ip {
             font-size: 12px;
             color: var(--accent-success);
             background: #1f3a2a40;
             padding: 4px 12px;
             border-radius: 30px;
-            font-weight: 500;
+            font-weight: 600;
         }
 
         .terminal-panel {
@@ -231,8 +232,8 @@
             padding: 10px 12px;
             height: 100px;
             overflow-y: auto;
-            white-space: pre-wrap;
-            word-break: break-all;
+            overflow-x: hidden;
+            white-space: normal;
             background: #01050c;
             scroll-behavior: smooth;
         }
@@ -254,6 +255,9 @@
             padding-left: 8px;
             margin-bottom: 3px;
             font-size: 11px;
+            overflow: hidden;
+            text-overflow: clip;
+            white-space: nowrap;
             animation: fadeSlide 0.08s ease-out;
         }
 
@@ -401,6 +405,7 @@
     let alarmEnabled = true;
     let audioContext = null;
     let audioUnlocked = false;
+    let pendingAlarmAfterUnlock = false;
     let lastAlarmTime = 0;
     const ALARM_THROTTLE_MS = 1500;
     
@@ -429,7 +434,6 @@
         
         const now = Date.now();
         if (now - lastAlarmTime < ALARM_THROTTLE_MS) return;
-        lastAlarmTime = now;
         
         let ctx = audioContext;
         if (!ctx) {
@@ -440,13 +444,14 @@
         // Function to actually generate sound
         const doBeep = () => {
             if (!alarmEnabled) return;
+            lastAlarmTime = Date.now();
             const currentTime = ctx.currentTime;
             const osc = ctx.createOscillator();
             const gain = ctx.createGain();
             osc.connect(gain);
             gain.connect(ctx.destination);
             osc.frequency.value = 880;
-            gain.gain.value = 0.2;
+            gain.gain.value = 5;
             osc.start();
             gain.gain.exponentialRampToValueAtTime(0.00001, currentTime + 0.4);
             osc.stop(currentTime + 0.4);
@@ -467,11 +472,14 @@
         
         // Handle audio context state (no toggle dependency, just play)
         if (ctx.state === 'suspended') {
+            pendingAlarmAfterUnlock = true;
             ctx.resume().then(() => {
                 audioUnlocked = true;
+                pendingAlarmAfterUnlock = false;
                 doBeep();
             }).catch(e => console.log("Audio resume failed", e));
         } else {
+            audioUnlocked = true;
             doBeep();
         }
     }
@@ -486,16 +494,32 @@
     
     // Unlock audio on first user interaction (any click)
     function unlockAudioOnUserAction() {
-        if (audioUnlocked) return;
+        if (audioUnlocked && !pendingAlarmAfterUnlock) return;
         const ctx = audioContext || initAudio();
         if (ctx && ctx.state === 'suspended') {
             ctx.resume().then(() => {
                 audioUnlocked = true;
                 console.log("Audio unlocked by user");
+                flushPendingAlarm();
             }).catch(e=>{});
         } else if (ctx) {
             audioUnlocked = true;
+            flushPendingAlarm();
         }
+    }
+
+    function flushPendingAlarm() {
+        if (pendingAlarmAfterUnlock && alarmEnabled) {
+            pendingAlarmAfterUnlock = false;
+            lastAlarmTime = 0;
+            playAlarmBeep();
+        }
+    }
+
+    function setupAudioUnlock() {
+        document.addEventListener('pointerdown', unlockAudioOnUserAction, { capture: true, passive: true });
+        document.addEventListener('keydown', unlockAudioOnUserAction, { capture: true });
+        document.addEventListener('touchstart', unlockAudioOnUserAction, { capture: true, passive: true });
     }
     
     // ======================= ALARM TOGGLE (ON/OFF working correctly) =======================
@@ -513,6 +537,12 @@
     function setupAlarmToggle() {
         alarmToggleBtn.addEventListener('click', (e) => {
             e.stopPropagation();
+            if (pendingAlarmAfterUnlock && alarmEnabled && !audioUnlocked) {
+                unlockAudioOnUserAction();
+                showToast("🔊 Alarm ready");
+                return;
+            }
+            unlockAudioOnUserAction();
             setAlarmEnabled(!alarmEnabled);
         });
         // initial state active
@@ -805,8 +835,7 @@
         
         // audio init with user unlock
         initAudio();
-        document.body.addEventListener('click', unlockAudioOnUserAction);
-        document.body.addEventListener('touchstart', unlockAudioOnUserAction);
+        setupAudioUnlock();
         
         // connect WebSocket
         connectWebSocket();
