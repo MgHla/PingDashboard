@@ -1,0 +1,827 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>PulseView | Multi-Column Ping Dashboard + Alarm</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --bg-deep: #0a0c10;
+            --bg-surface: #13161c;
+            --bg-elevated: #1a1f2a;
+            --border-subtle: #2c313c;
+            --accent-success: #2ea44f;
+            --accent-error: #f85149;
+            --text-primary: #f0f3f8;
+            --text-secondary: #8b949e;
+            --text-muted: #5c6570;
+            --font-mono: 'SF Mono', 'Fira Code', 'JetBrains Mono', monospace;
+            --shadow-card: 0 8px 20px rgba(0, 0, 0, 0.3);
+        }
+
+        body {
+            background: var(--bg-deep);
+            font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+            color: var(--text-primary);
+            padding: 10px;
+            min-height: 100vh;
+        }
+
+        /* Header with controls */
+        header {
+            margin-bottom: 5px;
+            padding-bottom: 5px;
+            border-bottom: 1px solid var(--border-subtle);
+        }
+
+        .top-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 16px;
+            margin-bottom: 5px;
+        }
+
+        .title-section h1 {
+            font-size: 26px;
+            font-weight: 600;
+            background: linear-gradient(135deg, #e6edf5, #9ab3cf);
+            background-clip: text;
+            -webkit-background-clip: text;
+            color: transparent;
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .controls-panel {
+            display: flex;
+            gap: 20px;
+            align-items: center;
+            flex-wrap: wrap;
+            background: var(--bg-elevated);
+            padding: 8px 20px;
+            border-radius: 60px;
+            border: 1px solid var(--border-subtle);
+        }
+
+        .alarm-toggle {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            user-select: none;
+            padding: 6px 12px;
+            border-radius: 40px;
+            background: #252b36;
+            transition: 0.2s;
+        }
+
+        .alarm-toggle.active {
+            background: #2ea44f30;
+            border: 1px solid #2ea44f;
+        }
+
+        .toggle-indicator {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: #8b949e;
+            transition: 0.2s;
+        }
+
+        .alarm-toggle.active .toggle-indicator {
+            background: #2ea44f;
+            box-shadow: 0 0 6px #2ea44f;
+        }
+
+        .column-selector {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 13px;
+        }
+
+        .col-buttons {
+            display: flex;
+            gap: 6px;
+        }
+
+        .col-btn {
+            background: #252b36;
+            border: 1px solid var(--border-subtle);
+            color: var(--text-secondary);
+            width: 32px;
+            height: 32px;
+            border-radius: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: 0.15s;
+            font-size: 13px;
+        }
+
+        .col-btn.active {
+            background: var(--accent-success);
+            color: white;
+            border-color: var(--accent-success);
+        }
+
+        .col-btn:hover {
+            background: #3a4150;
+        }
+
+        .status-badge {
+            background: var(--bg-elevated);
+            border-radius: 100px;
+            padding: 6px 14px;
+            font-size: 13px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            border: 1px solid var(--border-subtle);
+        }
+
+        .live-dot {
+            width: 10px;
+            height: 10px;
+            background-color: var(--accent-success);
+            border-radius: 50%;
+            box-shadow: 0 0 6px var(--accent-success);
+            animation: pulse 1.6s infinite;
+        }
+
+        @keyframes pulse {
+            0% { opacity: 0.5; transform: scale(0.9); }
+            100% { opacity: 1; transform: scale(1.2); }
+        }
+
+        /* Dynamic Grid */
+        .dashboard-grid {
+            display: grid;
+            gap: 10px;
+            transition: all 0.2s;
+        }
+
+        .host-card {
+            background: var(--bg-surface);
+            border-radius: 10px;
+            border: 1px solid var(--border-subtle);
+            overflow: hidden;
+            transition: all 0.2s ease;
+        }
+
+        .host-card:hover {
+            border-color: var(--accent-success);
+            transform: translateY(-2px);
+        }
+
+        .host-info-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: baseline;
+            padding: 5px;
+            flex-wrap: wrap;
+            gap: 4px;
+            background: rgba(20, 25, 35, 0.5);
+            border-bottom: 1px solid var(--border-subtle);
+        }
+
+        .host-ip {
+            font-family: var(--font-mono);
+            font-weight: 600;
+            font-size: 12px;
+            background: #0b0e14;
+            padding: 4px 12px;
+            border-radius: 40px;
+            border: 0.5px solid var(--border-subtle);
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .host-desc {
+            font-size: 12px;
+            color: var(--accent-success);
+            background: #1f3a2a40;
+            padding: 4px 12px;
+            border-radius: 30px;
+            font-weight: 500;
+        }
+
+        .terminal-panel {
+            margin: 10px 12px 14px;
+            background: #05080f;
+            border-radius: 16px;
+            border: 1px solid #2c313c;
+        }
+
+        .cli-scroll {
+            font-family: var(--font-mono);
+            font-size: 11px;
+            line-height: 1;
+            padding: 10px 12px;
+            height: 100px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            word-break: break-all;
+            background: #01050c;
+            scroll-behavior: smooth;
+        }
+
+        .cli-scroll::-webkit-scrollbar {
+            width: 4px;
+        }
+        .cli-scroll::-webkit-scrollbar-track {
+            background: #0f121b;
+        }
+        .cli-scroll::-webkit-scrollbar-thumb {
+            background: #2ea44f60;
+            border-radius: 6px;
+        }
+
+        .ping-entry {
+            display: block;
+            border-left: 2px solid transparent;
+            padding-left: 8px;
+            margin-bottom: 3px;
+            font-size: 11px;
+            animation: fadeSlide 0.08s ease-out;
+        }
+
+        .ping-success {
+            color: #b9fbc0;
+            border-left-color: var(--accent-success);
+        }
+
+        .ping-error {
+            color: #ffc9c9;
+            border-left-color: var(--accent-error);
+            background: #f53c33;
+        }
+
+        .ping-info {
+            color: #8ab3ff;
+        }
+
+        .footer-stats {
+            margin-top: 32px;
+            text-align: center;
+            font-size: 12px;
+            color: var(--text-muted);
+            border-top: 1px solid var(--border-subtle);
+            padding-top: 20px;
+            display: flex;
+            justify-content: center;
+            gap: 28px;
+            flex-wrap: wrap;
+        }
+
+        .skeleton-card {
+            background: var(--bg-surface);
+            border-radius: 20px;
+            padding: 28px;
+            border: 1px solid var(--border-subtle);
+            height: 200px;
+            animation: pulseSkeleton 1.4s infinite;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--text-muted);
+            text-align: center;
+        }
+
+        @keyframes pulseSkeleton {
+            0% { opacity: 0.5; }
+            50% { opacity: 0.9; }
+            100% { opacity: 0.5; }
+        }
+
+        .error-toast {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            background: #f85149e6;
+            backdrop-filter: blur(8px);
+            padding: 8px 18px;
+            border-radius: 40px;
+            font-size: 13px;
+            z-index: 1000;
+            animation: fadeInOut 2s ease forwards;
+        }
+
+        @keyframes fadeInOut {
+            0% { opacity: 0; transform: translateX(20px); }
+            15% { opacity: 1; transform: translateX(0); }
+            85% { opacity: 1; }
+            100% { opacity: 0; visibility: hidden; }
+        }
+
+        @media (max-width: 700px) {
+            body { padding: 12px; }
+            .controls-panel { padding: 6px 14px; }
+        }
+    </style>
+</head>
+<body>
+
+<header>
+    <div class="top-row">
+        <div class="title-section">
+            <h1>📡 PulseView</h1>
+            <div style="font-size: 10px; color: var(--text-secondary); margin-top: 2px;">
+                real-time ping dashboard | made with ❤ by MgHla
+            </div>
+        </div>
+        <div class="controls-panel">
+            <div id="alarmToggleBtn" class="alarm-toggle active">
+                <div class="toggle-indicator"></div>
+                <span>🔔 Error Alarm</span>
+            </div>
+            <div class="column-selector">
+                <span style="font-size: 13px;">📐 cols:</span>
+                <div class="col-buttons" id="colButtons">
+                    <button data-col="1" class="col-btn">1</button>
+                    <button data-col="2" class="col-btn">2</button>
+                    <button data-col="3" class="col-btn active">3</button>
+                    <button data-col="4" class="col-btn">4</button>
+                    <button data-col="5" class="col-btn">5</button>
+                    <button data-col="6" class="col-btn">6</button>
+                </div>
+            </div>
+            <div class="status-badge">
+                <span class="live-dot"></span>
+                <span>LIVE</span>
+                <span style="font-family: monospace;">WS</span>
+            </div>
+        </div>
+    </div>
+</header>
+
+<div id="dashboardRoot" class="dashboard-grid" style="grid-template-columns: repeat(3, 1fr);">
+    <div class="skeleton-card">⟳ Connecting to backend...</div>
+    <div class="skeleton-card">📡 Waiting for host data</div>
+    <div class="skeleton-card">🔊 Alarm will ring on ping failure</div>
+</div>
+
+<div class="footer-stats">
+    <span>✨ Adjust columns (1–6) | responsive layout</span>
+    <span>🔴 Error = beep + red highlight</span>
+    <span>⚡ Auto-scroll | remote-friendly</span>
+</div>
+
+<script>
+    // ======================= CONFIGURATION =======================
+    const WS_URL = (() => {
+        // Auto-detect WebSocket host (same origin as page, but fallback to localhost)
+        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const host = window.location.hostname || 'localhost';
+        const port = '3000';
+        return `${protocol}//${host}:${port}`;
+    })();
+    
+    let socket = null;
+    let reconnectAttempts = 0;
+    const MAX_RECONNECT = 8;
+    let reconnectTimer = null;
+    
+    // Data state
+    let currentHosts = [];         // store latest host list
+    let terminalRefs = new Map();   // ip -> DOM element
+    
+    // Alarm state (FIXED: simple boolean, no audio context locking issues)
+    let alarmEnabled = true;
+    let audioContext = null;
+    let audioUnlocked = false;
+    let lastAlarmTime = 0;
+    const ALARM_THROTTLE_MS = 1500;
+    
+    // Column state
+    let currentColumns = 3;
+    
+    // DOM elements
+    const dashboardContainer = document.getElementById('dashboardRoot');
+    const alarmToggleBtn = document.getElementById('alarmToggleBtn');
+    const colButtons = document.querySelectorAll('.col-btn');
+    
+    // ======================= AUDIO (simple & reliable) =======================
+    function initAudio() {
+        if (audioContext) return audioContext;
+        try {
+            audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            return audioContext;
+        } catch(e) {
+            console.warn("Web Audio not supported");
+            return null;
+        }
+    }
+    
+    function playAlarmBeep() {
+        if (!alarmEnabled) return;
+        
+        const now = Date.now();
+        if (now - lastAlarmTime < ALARM_THROTTLE_MS) return;
+        lastAlarmTime = now;
+        
+        let ctx = audioContext;
+        if (!ctx) {
+            ctx = initAudio();
+            if (!ctx) return;
+        }
+        
+        // Function to actually generate sound
+        const doBeep = () => {
+            if (!alarmEnabled) return;
+            const currentTime = ctx.currentTime;
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+            osc.frequency.value = 880;
+            gain.gain.value = 0.2;
+            osc.start();
+            gain.gain.exponentialRampToValueAtTime(0.00001, currentTime + 0.4);
+            osc.stop(currentTime + 0.4);
+            
+            // second lower tone
+            const osc2 = ctx.createOscillator();
+            const gain2 = ctx.createGain();
+            osc2.connect(gain2);
+            gain2.connect(ctx.destination);
+            osc2.frequency.value = 660;
+            gain2.gain.value = 0.5;
+            osc2.start(currentTime + 0.08);
+            gain2.gain.exponentialRampToValueAtTime(0.00001, currentTime + 0.48);
+            osc2.stop(currentTime + 0.48);
+            
+            showToast("🔔 Ping failure alarm");
+        };
+        
+        // Handle audio context state (no toggle dependency, just play)
+        if (ctx.state === 'suspended') {
+            ctx.resume().then(() => {
+                audioUnlocked = true;
+                doBeep();
+            }).catch(e => console.log("Audio resume failed", e));
+        } else {
+            doBeep();
+        }
+    }
+    
+    function showToast(msg) {
+        const toast = document.createElement('div');
+        toast.className = 'error-toast';
+        toast.innerText = msg;
+        document.body.appendChild(toast);
+        setTimeout(() => toast.remove(), 1800);
+    }
+    
+    // Unlock audio on first user interaction (any click)
+    function unlockAudioOnUserAction() {
+        if (audioUnlocked) return;
+        const ctx = audioContext || initAudio();
+        if (ctx && ctx.state === 'suspended') {
+            ctx.resume().then(() => {
+                audioUnlocked = true;
+                console.log("Audio unlocked by user");
+            }).catch(e=>{});
+        } else if (ctx) {
+            audioUnlocked = true;
+        }
+    }
+    
+    // ======================= ALARM TOGGLE (ON/OFF working correctly) =======================
+    function setAlarmEnabled(enabled) {
+        alarmEnabled = enabled;
+        if (alarmEnabled) {
+            alarmToggleBtn.classList.add('active');
+            showToast("🔊 Alarm ON");
+        } else {
+            alarmToggleBtn.classList.remove('active');
+            showToast("🔇 Alarm OFF");
+        }
+    }
+    
+    function setupAlarmToggle() {
+        alarmToggleBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            setAlarmEnabled(!alarmEnabled);
+        });
+        // initial state active
+        setAlarmEnabled(true);
+    }
+    
+    // ======================= COLUMN CONTROL =======================
+    function setColumns(cols) {
+        if (cols < 1) cols = 1;
+        if (cols > 6) cols = 6;
+        currentColumns = cols;
+        dashboardContainer.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
+        
+        // Update active button style
+        colButtons.forEach(btn => {
+            const val = parseInt(btn.getAttribute('data-col'));
+            if (val === cols) {
+                btn.classList.add('active');
+            } else {
+                btn.classList.remove('active');
+            }
+        });
+        
+        // Optionally persist in localStorage
+        localStorage.setItem('pulseview_columns', cols);
+    }
+    
+    function setupColumnButtons() {
+        colButtons.forEach(btn => {
+            btn.addEventListener('click', () => {
+                const cols = parseInt(btn.getAttribute('data-col'));
+                if (!isNaN(cols)) {
+                    setColumns(cols);
+                }
+            });
+        });
+        // Load saved preference
+        const saved = localStorage.getItem('pulseview_columns');
+        if (saved) {
+            const savedCols = parseInt(saved);
+            if (savedCols >= 1 && savedCols <= 6) {
+                setColumns(savedCols);
+            }
+        }
+    }
+    
+    // ======================= RENDER HOSTS (no blank issue, always preserves data) =======================
+    function renderHosts(hosts) {
+        if (!dashboardContainer) return;
+        
+        // Store current hosts for re-render (e.g., after column change)
+        currentHosts = hosts || [];
+        
+        if (!currentHosts || currentHosts.length === 0) {
+            dashboardContainer.innerHTML = `<div class="skeleton-card" style="grid-column: 1/-1;">📭 No hosts received from backend. Check connection.</div>`;
+            terminalRefs.clear();
+            return;
+        }
+        
+        // Clear container but preserve grid style
+        dashboardContainer.innerHTML = '';
+        terminalRefs.clear();
+        
+        currentHosts.forEach(host => {
+            const ip = host.IPaddress;
+            const description = host.Description || host.description || 'no label';
+            const normalizedId = ip.replace(/\./g, '-');
+            
+            const card = document.createElement('div');
+            card.className = 'host-card';
+            card.setAttribute('data-ip', ip);
+            
+            const infoBar = document.createElement('div');
+            infoBar.className = 'host-info-bar';
+            infoBar.innerHTML = `
+                <div class="host-desc">🏷️ ${escapeHtml(description)}</div>
+                <div class="host-ip"><span>🌐</span> ${escapeHtml(ip)}</div>
+            `;
+            
+            const terminalPanel = document.createElement('div');
+            terminalPanel.className = 'terminal-panel';
+            terminalPanel.innerHTML = `
+                <div id="term-${normalizedId}" class="cli-scroll">
+                    <div class="ping-entry ping-info">⏳ monitoring ping stream...</div>
+                </div>
+            `;
+            
+            card.appendChild(infoBar);
+            card.appendChild(terminalPanel);
+            dashboardContainer.appendChild(card);
+            
+            // Store reference
+            const scrollDiv = document.getElementById(`term-${normalizedId}`);
+            if (scrollDiv) {
+                terminalRefs.set(ip, scrollDiv);
+            }
+        });
+    }
+    
+    // Append ping line with error detection & alarm
+    function appendPingLine(ip, rawLine) {
+        const terminal = terminalRefs.get(ip);
+        if (!terminal) return;
+        
+        let line = rawLine || '';
+        const isError = /(timeout|timed out|unreachable|100% loss|ttl expired|no route|failed|transmit failed|request timed out|destination host unreachable|failure|packet loss)/i.test(line);
+        const isSuccess = /(time<|ttl=|bytes=|reply from|icmp_seq|rtt|time=)/i.test(line) && !isError;
+        const isInfo = /(statistics|packets|minimum|maximum|average|pinging|round-trip|sent|received)/i.test(line);
+        
+        let escaped = escapeHtml(line);
+        let className = 'ping-entry';
+        
+        if (isError) {
+            className += ' ping-error';
+            escaped = `🔴 ${escaped}`;
+            // 🔔 PLAY ALARM if enabled (fixed toggle)
+            if (alarmEnabled) {
+                playAlarmBeep();
+            }
+        } else if (isSuccess) {
+            className += ' ping-success';
+            escaped = `🟢 ${escaped}`;
+        } else if (isInfo) {
+            className += ' ping-info';
+            escaped = `ℹ️ ${escaped}`;
+        } else {
+            className += ' ping-info';
+            if (line.trim()) escaped = `· ${escaped}`;
+        }
+        
+        const lineDiv = document.createElement('div');
+        lineDiv.className = className;
+        lineDiv.innerHTML = escaped;
+        
+        // Remove placeholder if first real line
+        if (terminal.children.length === 1 && terminal.children[0].innerText.includes('monitoring ping stream')) {
+            terminal.innerHTML = '';
+        }
+        
+        terminal.appendChild(lineDiv);
+        // Keep buffer reasonable
+        while (terminal.children.length > 400) terminal.removeChild(terminal.firstChild);
+        terminal.scrollTop = terminal.scrollHeight;
+    }
+    
+    function escapeHtml(str) {
+        if (!str) return '';
+        return str.replace(/[&<>]/g, function(m) {
+            if (m === '&') return '&amp;';
+            if (m === '<') return '&lt;';
+            if (m === '>') return '&gt;';
+            return m;
+        });
+    }
+    
+    // ======================= WEBSOCKET (robust for remote access) =======================
+    function connectWebSocket() {
+        if (socket && socket.readyState === WebSocket.OPEN) return;
+        if (reconnectTimer) clearTimeout(reconnectTimer);
+        
+        try {
+            socket = new WebSocket(WS_URL);
+            
+            socket.onopen = () => {
+                console.log('WebSocket connected to', WS_URL);
+                reconnectAttempts = 0;
+                const badge = document.querySelector('.status-badge');
+                if (badge) badge.style.borderColor = '#2ea44f';
+                // clear any error skeletons
+                if (currentHosts.length === 0) {
+                    dashboardContainer.innerHTML = `<div class="skeleton-card">✓ Connected, waiting for init data...</div>`;
+                }
+            };
+            
+            socket.onmessage = (event) => {
+                try {
+                    const data = JSON.parse(event.data);
+                    if (data.type === 'init' && data.hosts) {
+                        // Important: for remote machines, ensure hosts array exists
+                        if (Array.isArray(data.hosts) && data.hosts.length > 0) {
+                            renderHosts(data.hosts);
+                        } else {
+                            console.warn("Init hosts empty, but keeping existing");
+                            if (currentHosts.length === 0) {
+                                renderHosts([]);
+                            }
+                        }
+                    } else if (data.type === 'ping') {
+                        if (data.ip && data.line !== undefined) {
+                            appendPingLine(data.ip, data.line);
+                        }
+                    }
+                } catch (err) {
+                    console.warn("JSON parse error", err);
+                }
+            };
+            
+            socket.onclose = (event) => {
+                console.warn("WebSocket closed, reconnecting...");
+                const badge = document.querySelector('.status-badge');
+                if (badge) badge.style.borderColor = '#f85149';
+                
+                if (reconnectAttempts < MAX_RECONNECT) {
+                    reconnectTimer = setTimeout(() => {
+                        reconnectAttempts++;
+                        connectWebSocket();
+                    }, 2000 * Math.min(1.5, reconnectAttempts / 2));
+                } else {
+                    if (dashboardContainer && currentHosts.length === 0) {
+                        dashboardContainer.innerHTML = `<div class="skeleton-card" style="grid-column:1/-1;">
+                            ⚠️ Cannot connect to backend at ${WS_URL}<br>
+                            <small>Ensure server is running on port 3000 and firewall allows it.</small>
+                            <button onclick="location.reload()" style="margin-top:12px; background:#2ea44f; border:none; padding:6px 18px; border-radius:30px; color:white; cursor:pointer;">⟳ Retry</button>
+                        </div>`;
+                    }
+                }
+            };
+            
+            socket.onerror = (err) => {
+                console.error("WebSocket error", err);
+            };
+        } catch(e) {
+            console.error("Connection exception", e);
+            if (dashboardContainer && currentHosts.length === 0) {
+                dashboardContainer.innerHTML = `<div class="skeleton-card">❌ Failed to connect. Verify backend.</div>`;
+            }
+        }
+    }
+    
+    // ======================= RE-RENDER ON COLUMN CHANGE (preserve data) =======================
+    function refreshLayoutPreserveData() {
+        if (currentHosts && currentHosts.length > 0) {
+            // Re-render to maintain proper terminal references after column change
+            // but keep existing ping data? easier: re-render fresh but keep host list
+            // However we need to preserve terminal logs: we'll store logs per IP and replay?
+            // Better: just re-render UI but the terminalRefs will be new; old logs vanish but that's acceptable tradeoff
+            // To avoid losing logs, we would need complex buffer, but for simplicity just re-render.
+            // But we can backup old logs? for better UX, we soft-render without clearing important stream? Actually terminal logs are transient, refresh is fine.
+            renderHosts(currentHosts);
+        }
+    }
+    
+    // override setColumns to also refresh if needed (optional but keeps consistency)
+    const originalSetColumns = setColumns;
+    setColumns = function(cols) {
+        originalSetColumns(cols);
+        // re-apply grid template to existing container (already done in original)
+        // but if we want to keep data consistent, no need to re-render hosts.
+        // However DOM structure unchanged, good.
+    };
+    
+    // Enhance setColumns to preserve host data after column change
+    const superSetColumns = (cols) => {
+        if (cols < 1) cols = 1;
+        if (cols > 6) cols = 6;
+        currentColumns = cols;
+        dashboardContainer.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
+        colButtons.forEach(btn => {
+            const val = parseInt(btn.getAttribute('data-col'));
+            btn.classList.toggle('active', val === cols);
+        });
+        localStorage.setItem('pulseview_columns', cols);
+    };
+    
+    // Override original
+    window.setColumns = superSetColumns;
+    // Rebind column buttons
+    function bindColumnButtons() {
+        colButtons.forEach(btn => {
+            btn.removeEventListener('click', () => {});
+            btn.addEventListener('click', (e) => {
+                const cols = parseInt(btn.getAttribute('data-col'));
+                if (!isNaN(cols)) superSetColumns(cols);
+            });
+        });
+    }
+    
+    // ======================= INIT =======================
+    function init() {
+        setupAlarmToggle();
+        bindColumnButtons();
+        // load saved columns after buttons bound
+        const savedCols = localStorage.getItem('pulseview_columns');
+        if (savedCols) {
+            const c = parseInt(savedCols);
+            if (c >= 1 && c <= 6) superSetColumns(c);
+        } else {
+            superSetColumns(3);
+        }
+        
+        // audio init with user unlock
+        initAudio();
+        document.body.addEventListener('click', unlockAudioOnUserAction);
+        document.body.addEventListener('touchstart', unlockAudioOnUserAction);
+        
+        // connect WebSocket
+        connectWebSocket();
+        
+        // Optional: periodic reconnect health check
+        setInterval(() => {
+            if (socket && socket.readyState !== WebSocket.OPEN && socket.readyState !== WebSocket.CONNECTING) {
+                if (reconnectAttempts < MAX_RECONNECT) {
+                    connectWebSocket();
+                }
+            }
+        }, 5000);
+    }
+    
+    init();
+</script>
+</body>
+</html>

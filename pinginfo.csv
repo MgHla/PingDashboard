@@ -1,0 +1,5 @@
+Group, IPaddress, Description
+Internet, 8.8.8.8, Google DNS
+Internet, 1.1.1.1, Cloudflare DNS
+fb, facebook.com, facebook
+blog, blog.mghla.net, MgHla's Blog
