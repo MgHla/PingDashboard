@@ -1,8 +1,8 @@
-# PulseView - Real-Time Connectivity Dashboard
+# PingCentral - Real-Time Connectivity Dashboard
 
-**PulseView** is a live network monitoring dashboard that displays real-time ping results from multiple hosts. It features a dynamic grid layout (1-6 columns), audio alerts on ping failures, and a WebSocket-powered backend for real-time updates.
+**PingCentral** is a live network monitoring dashboard that displays real-time ping results from multiple hosts. It features a dynamic grid layout (1-6 columns), audio alerts on ping failures, and a WebSocket-powered backend for real-time updates.
 
-![PulseView Dashboard](https://github.com/MgHla/PingDashboard/blob/main/PingDashboard.PNG?raw=true)
+![PingCentral Dashboard](https://github.com/MgHla/PingDashboard/blob/main/PingDashboard.PNG?raw=true)
 
 ## Features
 
