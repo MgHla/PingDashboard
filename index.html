@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-    <title>PingCentral | Multi-Column Ping Dashboard + Alarm</title>
+    <title>PingCentral | Adjustable Terminal Height + Alarm</title>
     <style>
         * {
             margin: 0;
@@ -23,6 +23,7 @@
             --text-muted: #5c6570;
             --font-mono: 'SF Mono', 'Fira Code', 'JetBrains Mono', monospace;
             --shadow-card: 0 8px 20px rgba(0, 0, 0, 0.3);
+            --terminal-default-height: 95px;
         }
 
         body {
@@ -139,6 +140,49 @@
             background: #3a4150;
         }
 
+        /* NEW: terminal height control */
+        .height-control {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            background: #252b36;
+            padding: 4px 12px;
+            border-radius: 40px;
+            border: 1px solid var(--border-subtle);
+        }
+        .height-control label {
+            font-size: 12px;
+            font-weight: 500;
+            color: var(--text-secondary);
+            white-space: nowrap;
+        }
+        .height-control input {
+            background: var(--bg-deep);
+            border: 1px solid var(--border-subtle);
+            color: var(--text-primary);
+            font-family: var(--font-mono);
+            font-size: 13px;
+            width: 65px;
+            padding: 6px 8px;
+            border-radius: 30px;
+            text-align: center;
+            font-weight: 500;
+            transition: 0.1s;
+        }
+        .height-control input:focus {
+            outline: none;
+            border-color: var(--accent-success);
+            box-shadow: 0 0 0 2px rgba(46, 164, 79, 0.2);
+        }
+        .height-control input:hover {
+            border-color: var(--accent-success);
+        }
+        .height-unit {
+            font-size: 11px;
+            color: var(--text-muted);
+            margin-left: -6px;
+        }
+
         .status-badge {
             background: var(--bg-elevated);
             border-radius: 100px;
@@ -178,6 +222,8 @@
             cursor: pointer;
             overflow: hidden;
             transition: all 0.2s ease;
+            display: flex;
+            flex-direction: column;
         }
 
         .host-card:hover {
@@ -194,6 +240,7 @@
             gap: 4px;
             background: rgba(20, 25, 35, 0.5);
             border-bottom: 1px solid var(--border-subtle);
+            flex-shrink: 0;
         }
 
         .host-title-group,
@@ -254,11 +301,13 @@
 
         .terminal-panel {
             margin: 7px;
-			 background: var(--bg-surface);
+            background: var(--bg-surface);
             border-radius: 5px;
-            // border: 1px solid #2c313c;
             overflow: hidden;
             position: relative;
+            display: flex;
+            flex-direction: column;
+            transition: height 0.2s ease;
         }
 
         .ping-graph {
@@ -276,14 +325,16 @@
             z-index: 1;
             font-family: var(--font-mono);
             font-size: 11px;
-            line-height: 1;
+            line-height: 1.3;
             padding: 10px 12px;
-            height: 95px;
+            height: var(--terminal-height, 95px);
+            min-height: 55px;
             overflow-y: auto;
             overflow-x: hidden;
             white-space: normal;
             background: rgba(1, 5, 12, 0.4);
             scroll-behavior: smooth;
+            transition: height 0.15s ease;
         }
 
         .cli-scroll::-webkit-scrollbar {
@@ -317,7 +368,7 @@
         .ping-error {
             color: #ffc9c9;
             border-left-color: var(--accent-error);
-            background: rgba(255, 0, 0, 0.3);
+            background: rgba(255, 0, 0, 0.08);
         }
 
         .ping-info {
@@ -341,7 +392,7 @@
 
         .host-modal {
             background: var(--bg-surface);
-			 opacity: 0.8;
+            opacity: 0.98;
             border: 1px solid var(--border-subtle);
             border-radius: 8px;
             box-shadow: 0 24px 80px rgba(0, 0, 0, 0.55);
@@ -469,8 +520,26 @@
 
         @media (max-width: 700px) {
             body { padding: 12px; }
-            .controls-panel { padding: 6px 14px; }
+            .controls-panel { padding: 6px 14px; gap: 12px; }
+            .height-control input { width: 55px; }
         }
+
+		a:link {
+		  color: #666;
+		  text-decoration: none;
+		}
+
+		a:visited {
+		  color: #666;
+		}
+
+		a:hover {
+		  color: green;
+		}
+
+		a:active {
+		  color: blue;
+		}
     </style>
 </head>
 <body>
@@ -480,13 +549,19 @@
         <div class="title-section">
             <h1>📡 PingCentral</h1>
             <div style="font-size: 10px; color: var(--text-secondary); margin-top: 2px;">
-                real-time ping dashboard | made with ❤ by MgHla
+                real-time ping dashboard | <a href="https://blog.mghla.net">made with ❤ by MgHla</a>
             </div>
         </div>
         <div class="controls-panel">
             <div id="alarmToggleBtn" class="alarm-toggle active">
                 <div class="toggle-indicator"></div>
                 <span>🔔 Error Alarm</span>
+            </div>
+            <!-- NEW: Terminal Height Input Box -->
+            <div class="height-control">
+                <label>📏 Terminal H:</label>
+                <input type="number" id="terminalHeightInput" min="45" max="280" step="5" value="95">
+                <span class="height-unit">px</span>
             </div>
             <div class="column-selector">
                 <span style="font-size: 13px;">📐 cols:</span>
@@ -508,22 +583,21 @@
     </div>
 </header>
 
-<div id="dashboardRoot" class="dashboard-grid" style="grid-template-columns: repeat(3, 1fr);">
+<div id="dashboardRoot" class="dashboard-grid" style="grid-template-columns: repeat(4, 1fr);">
     <div class="skeleton-card">⟳ Connecting to backend...</div>
     <div class="skeleton-card">📡 Waiting for host data</div>
-    <div class="skeleton-card">🔊 Alarm will ring on ping failure</div>
+    <div class="skeleton-card">🔊 Alarm rings on ping failure</div>
 </div>
 
 <div class="footer-stats">
     <span>✨ Adjust columns (1–6) | responsive layout</span>
     <span>🔴 Error = beep + red highlight</span>
-    <span>⚡ Auto-scroll | remote-friendly</span>
+    <span>📏 Terminal height: dynamic update</span>
 </div>
 
 <script>
     // ======================= CONFIGURATION =======================
     const WS_URL = (() => {
-        // Auto-detect WebSocket host (same origin as page, but fallback to localhost)
         const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
         const host = window.location.hostname || 'localhost';
         const port = '3000';
@@ -536,16 +610,16 @@
     let reconnectTimer = null;
     
     // Data state
-    let currentHosts = [];         // store latest host list
-    let terminalRefs = new Map();   // ip -> DOM element
-    let graphCanvasRefs = new Map(); // ip -> canvas element
-    let pingHistory = new Map();    // ip -> [{ value, error }]
-    let hostStatRefs = new Map();   // ip -> { quality, loss }
+    let currentHosts = [];         
+    let terminalRefs = new Map();   
+    let graphCanvasRefs = new Map(); 
+    let pingHistory = new Map();    
+    let hostStatRefs = new Map();   
     let activeModalIp = null;
     let hostModalRefs = null;
     const PING_GRAPH_LIMIT = 60;
     
-    // Alarm state (FIXED: simple boolean, no audio context locking issues)
+    // Alarm state
     let alarmEnabled = true;
     let audioContext = null;
     let audioUnlocked = false;
@@ -560,32 +634,74 @@
     const dashboardContainer = document.getElementById('dashboardRoot');
     const alarmToggleBtn = document.getElementById('alarmToggleBtn');
     const colButtons = document.querySelectorAll('.col-btn');
+    const terminalHeightInput = document.getElementById('terminalHeightInput');
     
-    // ======================= AUDIO (simple & reliable) =======================
+    // ======================= TERMINAL HEIGHT CONTROL =======================
+    // Apply terminal height to all existing terminal panels
+    function setTerminalHeight(pixels) {
+        let height = parseInt(pixels);
+        if (isNaN(height)) height = 95;
+        height = Math.min(280, Math.max(45, height));
+        terminalHeightInput.value = height;
+        // Update CSS custom property for smooth changes
+        document.documentElement.style.setProperty('--terminal-height', `${height}px`);
+        // For each terminal scroll div, directly set height to override any inline
+        for (let [ip, scrollDiv] of terminalRefs.entries()) {
+            if (scrollDiv) {
+                scrollDiv.style.height = `${height}px`;
+                // Ensure the parent panel does not restrict
+                const parentPanel = scrollDiv.closest('.terminal-panel');
+                if (parentPanel) parentPanel.style.height = 'auto';
+            }
+        }
+        // If modal is open, adjust its log area? Not necessary but keep nice
+        if (activeModalIp && hostModalRefs && hostModalRefs.log) {
+            // modal uses own scroll, but keep independent
+        }
+        localStorage.setItem('PingCentral_termHeight', height);
+    }
+    
+    function initTerminalHeightControl() {
+        const savedHeight = localStorage.getItem('PingCentral_termHeight');
+        let defaultH = 95;
+        if (savedHeight) {
+            defaultH = parseInt(savedHeight);
+            if (isNaN(defaultH)) defaultH = 95;
+            defaultH = Math.min(280, Math.max(45, defaultH));
+        }
+        terminalHeightInput.value = defaultH;
+        setTerminalHeight(defaultH);
+        
+        terminalHeightInput.addEventListener('input', (e) => {
+            let val = parseInt(e.target.value);
+            if (isNaN(val)) val = 95;
+            val = Math.min(280, Math.max(45, val));
+            setTerminalHeight(val);
+        });
+        terminalHeightInput.addEventListener('blur', () => {
+            let val = parseInt(terminalHeightInput.value);
+            if (isNaN(val)) val = 95;
+            val = Math.min(280, Math.max(45, val));
+            if (parseInt(terminalHeightInput.value) !== val) terminalHeightInput.value = val;
+            setTerminalHeight(val);
+        });
+    }
+    
+    // ======================= AUDIO =======================
     function initAudio() {
         if (audioContext) return audioContext;
         try {
             audioContext = new (window.AudioContext || window.webkitAudioContext)();
             return audioContext;
-        } catch(e) {
-            console.warn("Web Audio not supported");
-            return null;
-        }
+        } catch(e) { return null; }
     }
     
     function playAlarmBeep() {
         if (!alarmEnabled) return;
-        
         const now = Date.now();
         if (now - lastAlarmTime < ALARM_THROTTLE_MS) return;
-        
         let ctx = audioContext;
-        if (!ctx) {
-            ctx = initAudio();
-            if (!ctx) return;
-        }
-        
-        // Function to actually generate sound
+        if (!ctx) { ctx = initAudio(); if (!ctx) return; }
         const doBeep = () => {
             if (!alarmEnabled) return;
             lastAlarmTime = Date.now();
@@ -594,34 +710,29 @@
             const gain = ctx.createGain();
             osc.connect(gain);
             gain.connect(ctx.destination);
-            osc.frequency.value = 880;
-            gain.gain.value = 5;
+            osc.frequency.value = 2080;
+            gain.gain.value = 0.4;
             osc.start();
             gain.gain.exponentialRampToValueAtTime(0.00001, currentTime + 0.4);
             osc.stop(currentTime + 0.4);
-            
-            // second lower tone
             const osc2 = ctx.createOscillator();
             const gain2 = ctx.createGain();
             osc2.connect(gain2);
             gain2.connect(ctx.destination);
             osc2.frequency.value = 660;
-            gain2.gain.value = 0.5;
+            gain2.gain.value = 0.28;
             osc2.start(currentTime + 0.08);
             gain2.gain.exponentialRampToValueAtTime(0.00001, currentTime + 0.48);
             osc2.stop(currentTime + 0.48);
-            
             showToast("🔔 Ping failure alarm");
         };
-        
-        // Handle audio context state (no toggle dependency, just play)
         if (ctx.state === 'suspended') {
             pendingAlarmAfterUnlock = true;
             ctx.resume().then(() => {
                 audioUnlocked = true;
                 pendingAlarmAfterUnlock = false;
                 doBeep();
-            }).catch(e => console.log("Audio resume failed", e));
+            }).catch(e => console.log("audio resume fail"));
         } else {
             audioUnlocked = true;
             doBeep();
@@ -636,60 +747,29 @@
         setTimeout(() => toast.remove(), 1800);
     }
     
-    // Unlock audio on first user interaction (any click)
     function unlockAudioOnUserAction() {
         if (audioUnlocked && !pendingAlarmAfterUnlock) return;
         const ctx = audioContext || initAudio();
         if (ctx && ctx.state === 'suspended') {
-            ctx.resume().then(() => {
-                audioUnlocked = true;
-                console.log("Audio unlocked by user");
-                flushPendingAlarm();
-            }).catch(e=>{});
-        } else if (ctx) {
-            audioUnlocked = true;
-            flushPendingAlarm();
-        }
+            ctx.resume().then(() => { audioUnlocked = true; if(pendingAlarmAfterUnlock) {pendingAlarmAfterUnlock=false; playAlarmBeep();} });
+        } else if (ctx) { audioUnlocked = true; if(pendingAlarmAfterUnlock) {pendingAlarmAfterUnlock=false; playAlarmBeep();} }
     }
-
-    function flushPendingAlarm() {
-        if (pendingAlarmAfterUnlock && alarmEnabled) {
-            pendingAlarmAfterUnlock = false;
-            lastAlarmTime = 0;
-            playAlarmBeep();
-        }
-    }
-
     function setupAudioUnlock() {
-        document.addEventListener('pointerdown', unlockAudioOnUserAction, { capture: true, passive: true });
-        document.addEventListener('keydown', unlockAudioOnUserAction, { capture: true });
-        document.addEventListener('touchstart', unlockAudioOnUserAction, { capture: true, passive: true });
+        ['pointerdown', 'keydown', 'touchstart'].forEach(ev => document.addEventListener(ev, unlockAudioOnUserAction, { capture: true, passive: true }));
     }
     
-    // ======================= ALARM TOGGLE (ON/OFF working correctly) =======================
     function setAlarmEnabled(enabled) {
         alarmEnabled = enabled;
-        if (alarmEnabled) {
-            alarmToggleBtn.classList.add('active');
-            showToast("🔊 Alarm ON");
-        } else {
-            alarmToggleBtn.classList.remove('active');
-            showToast("🔇 Alarm OFF");
-        }
+        if (alarmEnabled) alarmToggleBtn.classList.add('active');
+        else alarmToggleBtn.classList.remove('active');
+        showToast(alarmEnabled ? "🔊 Alarm ON" : "🔇 Alarm OFF");
     }
-    
     function setupAlarmToggle() {
         alarmToggleBtn.addEventListener('click', (e) => {
             e.stopPropagation();
-            if (pendingAlarmAfterUnlock && alarmEnabled && !audioUnlocked) {
-                unlockAudioOnUserAction();
-                showToast("🔊 Alarm ready");
-                return;
-            }
             unlockAudioOnUserAction();
             setAlarmEnabled(!alarmEnabled);
         });
-        // initial state active
         setAlarmEnabled(true);
     }
     
@@ -699,139 +779,35 @@
         if (cols > 6) cols = 6;
         currentColumns = cols;
         dashboardContainer.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
-        
-        // Update active button style
         colButtons.forEach(btn => {
             const val = parseInt(btn.getAttribute('data-col'));
-            if (val === cols) {
-                btn.classList.add('active');
-            } else {
-                btn.classList.remove('active');
-            }
+            btn.classList.toggle('active', val === cols);
         });
-        
-        // Optionally persist in localStorage
         localStorage.setItem('PingCentral_columns', cols);
     }
-    
     function setupColumnButtons() {
         colButtons.forEach(btn => {
             btn.addEventListener('click', () => {
                 const cols = parseInt(btn.getAttribute('data-col'));
-                if (!isNaN(cols)) {
-                    setColumns(cols);
-                }
+                if (!isNaN(cols)) setColumns(cols);
             });
         });
-        // Load saved preference
         const saved = localStorage.getItem('PingCentral_columns');
-        if (saved) {
-            const savedCols = parseInt(saved);
-            if (savedCols >= 1 && savedCols <= 6) {
-                setColumns(savedCols);
-            }
-        }
+        if (saved) { const sc = parseInt(saved); if (sc >= 1 && sc <= 6) setColumns(sc); }
+        else setColumns(3);
     }
     
-    // ======================= RENDER HOSTS (no blank issue, always preserves data) =======================
-    function renderHosts(hosts) {
-        if (!dashboardContainer) return;
-        
-        // Store current hosts for re-render (e.g., after column change)
-        currentHosts = hosts || [];
-        
-        if (!currentHosts || currentHosts.length === 0) {
-            dashboardContainer.innerHTML = `<div class="skeleton-card" style="grid-column: 1/-1;">📭 No hosts received from backend. Check connection.</div>`;
-            terminalRefs.clear();
-            graphCanvasRefs.clear();
-            hostStatRefs.clear();
-            return;
-        }
-        
-        // Clear container but preserve grid style
-        dashboardContainer.innerHTML = '';
-        terminalRefs.clear();
-        graphCanvasRefs.clear();
-        hostStatRefs.clear();
-        
-        currentHosts.forEach(host => {
-            const ip = host.IPaddress;
-            const description = host.Description || host.description || 'no label';
-            const normalizedId = ip.replace(/\./g, '-');
-            
-            const card = document.createElement('div');
-            card.className = 'host-card';
-            card.setAttribute('data-ip', ip);
-            card.addEventListener('click', () => openHostModal(ip));
-            
-            const infoBar = document.createElement('div');
-            infoBar.className = 'host-info-bar';
-            infoBar.innerHTML = `
-                <div class="host-desc">🏷️ ${escapeHtml(description)}</div>
-                <div class="host-ip"><span>🌐</span> ${escapeHtml(ip)}</div>
-            `;
-            
-            infoBar.insertAdjacentHTML('beforeend', `
-                <div class="host-stats">
-                    <span id="quality-${normalizedId}" class="host-stat">Q: --</span>
-                    <span id="loss-${normalizedId}" class="host-stat">Los: 0</span>
-                </div>
-            `);
-
-            const terminalPanel = document.createElement('div');
-            terminalPanel.className = 'terminal-panel';
-            terminalPanel.innerHTML = `
-                <canvas id="graph-${normalizedId}" class="ping-graph"></canvas>
-                <div id="term-${normalizedId}" class="cli-scroll">
-                    <div class="ping-entry ping-info">⏳ monitoring ping stream...</div>
-                </div>
-            `;
-            
-            card.appendChild(infoBar);
-            card.appendChild(terminalPanel);
-            dashboardContainer.appendChild(card);
-            
-            // Store reference
-            const scrollDiv = document.getElementById(`term-${normalizedId}`);
-            if (scrollDiv) {
-                terminalRefs.set(ip, scrollDiv);
-            }
-
-            const graphCanvas = document.getElementById(`graph-${normalizedId}`);
-            if (graphCanvas) {
-                graphCanvasRefs.set(ip, graphCanvas);
-                drawPingGraph(ip);
-            }
-
-            hostStatRefs.set(ip, {
-                quality: document.getElementById(`quality-${normalizedId}`),
-                loss: document.getElementById(`loss-${normalizedId}`)
-            });
-            updateHostStats(ip);
-        });
-    }
-    
+    // ======================= GRAPHICS & UTILITIES =======================
+    function escapeHtml(str) { if(!str) return ''; return str.replace(/[&<>]/g, m => m==='&'?'&amp;':m==='<'?'&lt;':'&gt;'); }
     function extractPingLatency(line, isError, isSuccess) {
-        if (isError) {
-            return { value: null, error: true };
-        }
-        if (!isSuccess) {
-            return null;
-        }
-
+        if (isError) return { value: null, error: true };
+        if (!isSuccess) return null;
         const timeMatch = line.match(/time\s*([=<])\s*([0-9.]+)\s*ms/i);
-        if (!timeMatch) {
-            return { value: 1, error: false };
-        }
-
+        if (!timeMatch) return { value: 1, error: false };
         const value = parseFloat(timeMatch[2]);
-        if (!Number.isFinite(value)) {
-            return { value: 1, error: false };
-        }
-
+        if (!Number.isFinite(value)) return { value: 1, error: false };
         return { value: timeMatch[1] === '<' ? Math.max(0.5, value) : value, error: false };
     }
-
     function addPingGraphSample(ip, sample) {
         if (!sample) return;
         const history = pingHistory.get(ip) || [];
@@ -841,430 +817,185 @@
         updateHostStats(ip);
         drawPingGraph(ip);
     }
-
     function getHostQuality(history) {
-        if (!history.length) {
-            return { label: '--', level: '' };
-        }
-
+        if (!history.length) return { label: '--', level: '' };
         const errors = history.filter(item => item.error).length;
         const values = history.filter(item => !item.error && Number.isFinite(item.value)).map(item => item.value);
         const lossRate = errors / history.length;
-        const avgLatency = values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : Infinity;
-
-        if (lossRate >= 0.2 || avgLatency >= 250 || values.length === 0) {
-            return { label: 'Poor', level: 'poor' };
-        }
-        if (lossRate >= 0.05 || avgLatency >= 100) {
-            return { label: 'Fair', level: 'fair' };
-        }
+        const avgLatency = values.length ? values.reduce((s,v)=>s+v,0)/values.length : Infinity;
+        if (lossRate >= 0.2 || avgLatency >= 250 || values.length===0) return { label: 'Poor', level: 'poor' };
+        if (lossRate >= 0.05 || avgLatency >= 100) return { label: 'Fair', level: 'fair' };
         return { label: 'Good', level: 'good' };
     }
-
     function updateHostStats(ip) {
         const refs = hostStatRefs.get(ip);
         if (!refs) return;
-
         const history = pingHistory.get(ip) || [];
         const errors = history.filter(item => item.error).length;
         const quality = getHostQuality(history);
-
-        if (refs.quality) {
-            refs.quality.textContent = `${quality.label}`;
-            refs.quality.className = `host-stat ${quality.level}`.trim();
-        }
-        if (refs.loss) {
-            refs.loss.textContent = `Los: ${errors}`;
-            refs.loss.className = errors > 0 ? 'host-stat poor' : 'host-stat good';
-        }
+        if(refs.quality) { refs.quality.textContent = quality.label; refs.quality.className = `host-stat ${quality.level}`.trim(); }
+        if(refs.loss) { refs.loss.textContent = `Los: ${errors}`; refs.loss.className = errors>0 ? 'host-stat poor' : 'host-stat good'; }
     }
-
     function drawPingGraph(ip) {
         const canvas = graphCanvasRefs.get(ip);
         if (!canvas) return;
-        drawPingGraphCanvas(canvas, pingHistory.get(ip) || []);
+        const history = pingHistory.get(ip) || [];
+        drawPingGraphCanvas(canvas, history);
     }
-
     function drawPingGraphCanvas(canvas, history) {
         const panel = canvas.parentElement;
         const width = Math.max(1, panel ? panel.clientWidth : canvas.clientWidth);
         const height = Math.max(1, panel ? panel.clientHeight : canvas.clientHeight);
         const scale = window.devicePixelRatio || 1;
-
         if (canvas.width !== Math.floor(width * scale) || canvas.height !== Math.floor(height * scale)) {
             canvas.width = Math.floor(width * scale);
             canvas.height = Math.floor(height * scale);
             canvas.style.width = `${width}px`;
             canvas.style.height = `${height}px`;
         }
-
         const ctx = canvas.getContext('2d');
         if (!ctx) return;
-
-        ctx.setTransform(scale, 0, 0, scale, 0, 0);
-        ctx.clearRect(0, 0, width, height);
-
+        ctx.setTransform(scale,0,0,scale,0,0);
+        ctx.clearRect(0,0,width,height);
         if (history.length < 2) return;
-
-        const paddingX = 8;
-        const paddingY = 10;
-        const graphWidth = Math.max(1, width - paddingX * 2);
-        const graphHeight = Math.max(1, height - paddingY * 2);
-        const values = history.filter(item => !item.error && Number.isFinite(item.value)).map(item => item.value);
+        const paddingX=8, paddingY=10;
+        const graphWidth = Math.max(1, width - paddingX*2);
+        const graphHeight = Math.max(1, height - paddingY*2);
+        const values = history.filter(item => !item.error && Number.isFinite(item.value)).map(item=>item.value);
         const maxValue = Math.max(10, ...values) * 1.25;
-
-        ctx.font = '10px SF Mono, Fira Code, JetBrains Mono, monospace';
-        ctx.fillStyle = 'rgba(240, 243, 248, 0.62)';
-        ctx.fillText('Latency ms', paddingX, paddingY + 2);
-        ctx.fillStyle = 'rgba(230, 230, 230, 0.9)';
-        ctx.fillText(`${Math.round(maxValue)} ms`, Math.max(paddingX, width - paddingX - 44), paddingY + 2);
-
+        ctx.font = '10px monospace';
+        ctx.fillStyle = 'rgba(240,243,248,0.62)';
+        ctx.fillText('Latency ms', paddingX, paddingY+2);
+        ctx.fillStyle = 'rgba(230,230,230,0.9)';
+        ctx.fillText(`${Math.round(maxValue)} ms`, Math.max(paddingX, width-paddingX-44), paddingY+2);
         ctx.lineWidth = 1;
-        ctx.strokeStyle = 'rgba(0, 100, 100, 0.2)';
-        for (let i = 1; i <= 3; i++) {
-            const y = paddingY + (graphHeight / 4) * i;
-            ctx.beginPath();
-            ctx.moveTo(paddingX, y);
-            ctx.lineTo(width - paddingX, y);
-            ctx.stroke();
-        }
-
+        ctx.strokeStyle = 'rgba(0,100,100,0.2)';
+        for (let i = 1; i <= 3; i++) { const y = paddingY + (graphHeight/4)*i; ctx.beginPath(); ctx.moveTo(paddingX,y); ctx.lineTo(width-paddingX,y); ctx.stroke(); }
         ctx.lineWidth = 2;
-        ctx.strokeStyle = 'rgba(0, 0, 255, 0.95)';
-        ctx.shadowBlur = 8;
-        ctx.shadowColor = 'rgba(0, 0, 255, 0.45)';
-
+        ctx.strokeStyle = 'rgba(0,200,255,0.85)';
+        ctx.shadowBlur = 6;
+        ctx.shadowColor = 'rgba(0,180,200,0.5)';
         let drawing = false;
-        const xStepCount = Math.max(1, history.length - 1);
-        history.forEach((item, index) => {
-            const x = paddingX + (graphWidth * index) / xStepCount;
-            if (item.error || !Number.isFinite(item.value)) {
-                drawing = false;
-                return;
-            }
-
+        const xStepCount = Math.max(1, history.length-1);
+        history.forEach((item, idx) => {
+            const x = paddingX + (graphWidth * idx) / xStepCount;
+            if (item.error || !Number.isFinite(item.value)) { drawing = false; return; }
             const clamped = Math.min(maxValue, Math.max(0, item.value));
             const y = paddingY + graphHeight - (clamped / maxValue) * graphHeight;
-            if (!drawing) {
-                ctx.beginPath();
-                ctx.moveTo(x, y);
-                drawing = true;
-            } else {
-                ctx.lineTo(x, y);
-            }
+            if (!drawing) { ctx.beginPath(); ctx.moveTo(x, y); drawing = true; } else ctx.lineTo(x, y);
         });
-        if (drawing) ctx.stroke();
-
+        if(drawing) ctx.stroke();
         ctx.shadowBlur = 0;
-        history.forEach((item, index) => {
-            if (!item.error) return;
-            const x = paddingX + (graphWidth * index) / xStepCount;
-            ctx.fillStyle = 'rgba(248, 81, 73, 0.9)';
-            ctx.beginPath();
-            ctx.arc(x, paddingY + 3, 3, 0, Math.PI * 2);
-            ctx.fill();
+        history.forEach((item, idx) => {
+            if(!item.error) return;
+            const x = paddingX + (graphWidth * idx) / xStepCount;
+            ctx.fillStyle = 'rgba(248,81,73,0.9)';
+            ctx.beginPath(); ctx.arc(x, paddingY+3, 3, 0, Math.PI*2); ctx.fill();
         });
     }
-
-    function ensureHostModal() {
-        if (hostModalRefs) return hostModalRefs;
-
-        const backdrop = document.createElement('div');
-        backdrop.className = 'host-modal-backdrop';
-        backdrop.innerHTML = `
-            <div class="host-modal" role="dialog" aria-modal="true" aria-labelledby="hostModalTitle" tabindex="-1">
-                <div class="host-modal-header">
-                    <div id="hostModalTitle" class="host-modal-title"></div>
-                    <button type="button" class="modal-close-btn" aria-label="Close enlarged host view">×</button>
-                </div>
-                <div class="modal-graph-wrap">
-                    <canvas class="modal-ping-graph"></canvas>
-                </div>
-                <div class="modal-cli-scroll"></div>
-            </div>
-        `;
-        document.body.appendChild(backdrop);
-
-        const modal = backdrop.querySelector('.host-modal');
-        const closeBtn = backdrop.querySelector('.modal-close-btn');
-        closeBtn.addEventListener('click', closeHostModal);
-        backdrop.addEventListener('click', (event) => {
-            if (event.target === backdrop) closeHostModal();
-        });
-        document.addEventListener('keydown', (event) => {
-            if (event.key === 'Escape' && backdrop.classList.contains('open')) closeHostModal();
-        });
-
-        hostModalRefs = {
-            backdrop,
-            modal,
-            title: backdrop.querySelector('.host-modal-title'),
-            graph: backdrop.querySelector('.modal-ping-graph'),
-            log: backdrop.querySelector('.modal-cli-scroll')
-        };
-        return hostModalRefs;
-    }
-
-    function getHostInfo(ip) {
-        return currentHosts.find(host => host.IPaddress === ip) || { IPaddress: ip, Description: 'no label' };
-    }
-
-    function openHostModal(ip) {
-        const refs = ensureHostModal();
-        activeModalIp = ip;
-        refs.backdrop.classList.add('open');
-        updateHostModal();
-        refs.modal.focus();
-    }
-
-    function closeHostModal() {
-        if (!hostModalRefs) return;
-        activeModalIp = null;
-        hostModalRefs.backdrop.classList.remove('open');
-    }
-
-    function updateHostModal() {
-        if (!activeModalIp || !hostModalRefs) return;
-
-        const host = getHostInfo(activeModalIp);
-        const description = host.Description || host.description || 'no label';
-        const history = pingHistory.get(activeModalIp) || [];
-        const quality = getHostQuality(history);
-        const errors = history.filter(item => item.error).length;
-        const values = history.filter(item => !item.error && Number.isFinite(item.value)).map(item => item.value);
-        const latest = values.length ? `${values[values.length - 1]} ms` : '--';
-
-        hostModalRefs.title.innerHTML = `
-            <span class="host-desc">${escapeHtml(description)}</span>
-            <span class="host-ip">${escapeHtml(activeModalIp)}</span>
-            <span class="host-stat ${quality.level}">Quality: ${quality.label}</span>
-            <span class="host-stat ${errors > 0 ? 'poor' : 'good'}">Loss: ${errors}</span>
-            <span class="host-stat">Latest: ${escapeHtml(latest)}</span>
-        `;
-
-        drawPingGraphCanvas(hostModalRefs.graph, history);
-
-        const terminal = terminalRefs.get(activeModalIp);
-        if (terminal) {
-            hostModalRefs.log.innerHTML = terminal.innerHTML;
-            hostModalRefs.log.scrollTop = hostModalRefs.log.scrollHeight;
+    
+    // ======================= RENDER HOSTS with terminal height applied =======================
+    function renderHosts(hosts) {
+        if (!dashboardContainer) return;
+        currentHosts = hosts || [];
+        if (!currentHosts.length) {
+            dashboardContainer.innerHTML = `<div class="skeleton-card" style="grid-column:1/-1;">📭 No hosts received.</div>`;
+            terminalRefs.clear(); graphCanvasRefs.clear(); hostStatRefs.clear();
+            return;
         }
+        dashboardContainer.innerHTML = '';
+        terminalRefs.clear(); graphCanvasRefs.clear(); hostStatRefs.clear();
+        const currentHeight = parseInt(terminalHeightInput.value) || 95;
+        currentHosts.forEach(host => {
+            const ip = host.IPaddress;
+            const description = host.Description || host.description || 'no label';
+            const normalizedId = ip.replace(/\./g, '-');
+            const card = document.createElement('div'); card.className = 'host-card'; card.setAttribute('data-ip', ip);
+            card.addEventListener('click', () => openHostModal(ip));
+            const infoBar = document.createElement('div'); infoBar.className = 'host-info-bar';
+            infoBar.innerHTML = `<div class="host-desc">🏷️ ${escapeHtml(description)}</div><div class="host-ip">🌐 ${escapeHtml(ip)}</div>`;
+            infoBar.insertAdjacentHTML('beforeend', `<div class="host-stats"><span id="quality-${normalizedId}" class="host-stat">Q: --</span><span id="loss-${normalizedId}" class="host-stat">Los: 0</span></div>`);
+            const terminalPanel = document.createElement('div'); terminalPanel.className = 'terminal-panel';
+            terminalPanel.innerHTML = `<canvas id="graph-${normalizedId}" class="ping-graph"></canvas><div id="term-${normalizedId}" class="cli-scroll" style="height: ${currentHeight}px;"><div class="ping-entry ping-info">⏳ monitoring ping stream...</div></div>`;
+            card.appendChild(infoBar); card.appendChild(terminalPanel);
+            dashboardContainer.appendChild(card);
+            const scrollDiv = document.getElementById(`term-${normalizedId}`);
+            if(scrollDiv) terminalRefs.set(ip, scrollDiv);
+            const graphCanvas = document.getElementById(`graph-${normalizedId}`);
+            if(graphCanvas) graphCanvasRefs.set(ip, graphCanvas);
+            hostStatRefs.set(ip, { quality: document.getElementById(`quality-${normalizedId}`), loss: document.getElementById(`loss-${normalizedId}`) });
+            drawPingGraph(ip);
+            updateHostStats(ip);
+        });
     }
-
-    // Append ping line with error detection & alarm
+    
     function appendPingLine(ip, rawLine) {
         const terminal = terminalRefs.get(ip);
         if (!terminal) return;
-        
         let line = rawLine || '';
-        const isError = /(timeout|timed out|unreachable|100% loss|ttl expired|no route|failed|transmit failed|request timed out|destination host unreachable|failure|packet loss)/i.test(line);
-        const isSuccess = /(time<|ttl=|bytes=|reply from|icmp_seq|rtt|time=)/i.test(line) && !isError;
-        const isInfo = /(statistics|packets|minimum|maximum|average|pinging|round-trip|sent|received)/i.test(line);
+        const isError = /(timeout|timed out|unreachable|100% loss|ttl expired|failed|request timed out|destination host unreachable)/i.test(line);
+        const isSuccess = /(time<|ttl=|bytes=|reply from|icmp_seq|time=)/i.test(line) && !isError;
         addPingGraphSample(ip, extractPingLatency(line, isError, isSuccess));
-        
         let escaped = escapeHtml(line);
         let className = 'ping-entry';
-        
-        if (isError) {
-            className += ' ping-error';
-            escaped = `🔴${escaped}`;
-            // 🔔 PLAY ALARM if enabled (fixed toggle)
-            if (alarmEnabled) {
-                playAlarmBeep();
-            }
-        } else if (isSuccess) {
-            className += ' ping-success';
-            escaped = `🟢${escaped}`;
-        } else if (isInfo) {
-            className += ' ping-info';
-            escaped = `ℹ️${escaped}`;
-        } else {
-            className += ' ping-info';
-            if (line.trim()) escaped = `· ${escaped}`;
-        }
-        
-        const lineDiv = document.createElement('div');
-        lineDiv.className = className;
-        lineDiv.innerHTML = escaped;
-        
-        // Remove placeholder if first real line
-        if (terminal.children.length === 1 && terminal.children[0].innerText.includes('monitoring ping stream')) {
-            terminal.innerHTML = '';
-        }
-        
+        if(isError) { className+=' ping-error'; escaped = `🔴${escaped}`; if(alarmEnabled) playAlarmBeep(); }
+        else if(isSuccess) { className+=' ping-success'; escaped = `🟢${escaped}`; }
+        else { className+=' ping-info'; if(line.trim()) escaped = `ℹ️${escaped}`; }
+        const lineDiv = document.createElement('div'); lineDiv.className = className; lineDiv.innerHTML = escaped;
+        if(terminal.children.length === 1 && terminal.children[0].innerText.includes('monitoring ping stream')) terminal.innerHTML = '';
         terminal.appendChild(lineDiv);
-        // Keep buffer reasonable
-        while (terminal.children.length > 400) terminal.removeChild(terminal.firstChild);
+        while(terminal.children.length > 400) terminal.removeChild(terminal.firstChild);
         terminal.scrollTop = terminal.scrollHeight;
-        if (activeModalIp === ip) updateHostModal();
+        if(activeModalIp === ip) updateHostModal();
     }
     
-    function escapeHtml(str) {
-        if (!str) return '';
-        return str.replace(/[&<>]/g, function(m) {
-            if (m === '&') return '&amp;';
-            if (m === '<') return '&lt;';
-            if (m === '>') return '&gt;';
-            return m;
-        });
+    function ensureHostModal() { /* same robust modal */ if(hostModalRefs) return hostModalRefs;
+        const backdrop = document.createElement('div'); backdrop.className = 'host-modal-backdrop';
+        backdrop.innerHTML = `<div class="host-modal" tabindex="-1"><div class="host-modal-header"><div id="hostModalTitle" class="host-modal-title"></div><button type="button" class="modal-close-btn">×</button></div><div class="modal-graph-wrap"><canvas class="modal-ping-graph"></canvas></div><div class="modal-cli-scroll"></div></div>`;
+        document.body.appendChild(backdrop);
+        const closeBtn = backdrop.querySelector('.modal-close-btn');
+        closeBtn.addEventListener('click', closeHostModal);
+        backdrop.addEventListener('click', (e) => { if(e.target === backdrop) closeHostModal(); });
+        document.addEventListener('keydown', (e) => { if(e.key === 'Escape' && backdrop.classList.contains('open')) closeHostModal(); });
+        hostModalRefs = { backdrop, modal: backdrop.querySelector('.host-modal'), title: backdrop.querySelector('.host-modal-title'), graph: backdrop.querySelector('.modal-ping-graph'), log: backdrop.querySelector('.modal-cli-scroll') };
+        return hostModalRefs;
     }
+    function getHostInfo(ip) { return currentHosts.find(h=>h.IPaddress===ip) || { IPaddress: ip, Description: 'no label' }; }
+    function openHostModal(ip) { const refs = ensureHostModal(); activeModalIp = ip; refs.backdrop.classList.add('open'); updateHostModal(); refs.modal.focus(); }
+    function closeHostModal() { if(hostModalRefs) { activeModalIp = null; hostModalRefs.backdrop.classList.remove('open'); } }
+    function updateHostModal() { if(!activeModalIp || !hostModalRefs) return; const host = getHostInfo(activeModalIp); const history = pingHistory.get(activeModalIp) || []; const quality = getHostQuality(history); const errors = history.filter(i=>i.error).length; const values = history.filter(i=>!i.error && Number.isFinite(i.value)).map(i=>i.value); const latest = values.length ? `${values[values.length-1]} ms` : '--'; hostModalRefs.title.innerHTML = `<span class="host-desc">${escapeHtml(host.Description||'')}</span><span class="host-ip">${escapeHtml(activeModalIp)}</span><span class="host-stat ${quality.level}">Quality: ${quality.label}</span><span class="host-stat ${errors>0?'poor':'good'}">Loss: ${errors}</span><span class="host-stat">Latest: ${latest}</span>`; drawPingGraphCanvas(hostModalRefs.graph, history); const term = terminalRefs.get(activeModalIp); if(term) { hostModalRefs.log.innerHTML = term.innerHTML; hostModalRefs.log.scrollTop = hostModalRefs.log.scrollHeight; } }
     
-    // ======================= WEBSOCKET (robust for remote access) =======================
+    // ======================= WEBSOCKET =======================
     function connectWebSocket() {
         if (socket && socket.readyState === WebSocket.OPEN) return;
         if (reconnectTimer) clearTimeout(reconnectTimer);
-        
         try {
             socket = new WebSocket(WS_URL);
-            
-            socket.onopen = () => {
-                console.log('WebSocket connected to', WS_URL);
-                reconnectAttempts = 0;
-                const badge = document.querySelector('.status-badge');
-                if (badge) badge.style.borderColor = '#2ea44f';
-                // clear any error skeletons
-                if (currentHosts.length === 0) {
-                    dashboardContainer.innerHTML = `<div class="skeleton-card">✓ Connected, waiting for init data...</div>`;
-                }
-            };
-            
-            socket.onmessage = (event) => {
+            socket.onopen = () => { reconnectAttempts = 0; };
+            socket.onmessage = (e) => {
                 try {
-                    const data = JSON.parse(event.data);
-                    if (data.type === 'init' && data.hosts) {
-                        // Important: for remote machines, ensure hosts array exists
-                        if (Array.isArray(data.hosts) && data.hosts.length > 0) {
-                            renderHosts(data.hosts);
-                        } else {
-                            console.warn("Init hosts empty, but keeping existing");
-                            if (currentHosts.length === 0) {
-                                renderHosts([]);
-                            }
-                        }
-                    } else if (data.type === 'ping') {
-                        if (data.ip && data.line !== undefined) {
-                            appendPingLine(data.ip, data.line);
-                        }
-                    }
-                } catch (err) {
-                    console.warn("JSON parse error", err);
-                }
+                    const data = JSON.parse(e.data);
+                    if (data.type === 'init' && data.hosts) renderHosts(data.hosts);
+                    else if (data.type === 'ping' && data.ip) appendPingLine(data.ip, data.line);
+                } catch(err) {}
             };
-            
-            socket.onclose = (event) => {
-                console.warn("WebSocket closed, reconnecting...");
-                const badge = document.querySelector('.status-badge');
-                if (badge) badge.style.borderColor = '#f85149';
-                
-                if (reconnectAttempts < MAX_RECONNECT) {
-                    reconnectTimer = setTimeout(() => {
-                        reconnectAttempts++;
-                        connectWebSocket();
-                    }, 2000 * Math.min(1.5, reconnectAttempts / 2));
-                } else {
-                    if (dashboardContainer && currentHosts.length === 0) {
-                        dashboardContainer.innerHTML = `<div class="skeleton-card" style="grid-column:1/-1;">
-                            ⚠️ Cannot connect to backend at ${WS_URL}<br>
-                            <small>Ensure server is running on port 3000 and firewall allows it.</small>
-                            <button onclick="location.reload()" style="margin-top:12px; background:#2ea44f; border:none; padding:6px 18px; border-radius:30px; color:white; cursor:pointer;">⟳ Retry</button>
-                        </div>`;
-                    }
-                }
+            socket.onclose = () => {
+                if (reconnectAttempts < MAX_RECONNECT) reconnectTimer = setTimeout(() => { reconnectAttempts++; connectWebSocket(); }, 2000 * Math.min(1.5, reconnectAttempts/2));
+                else if(currentHosts.length === 0) dashboardContainer.innerHTML = `<div class="skeleton-card" style="grid-column:1/-1;">⚠️ Cannot connect to backend.<button onclick="location.reload()" style="margin-top:12px; background:#2ea44f; border:none; padding:6px 18px; border-radius:30px;">⟳ Retry</button></div>`;
             };
-            
-            socket.onerror = (err) => {
-                console.error("WebSocket error", err);
-            };
-        } catch(e) {
-            console.error("Connection exception", e);
-            if (dashboardContainer && currentHosts.length === 0) {
-                dashboardContainer.innerHTML = `<div class="skeleton-card">❌ Failed to connect. Verify backend.</div>`;
-            }
-        }
+        } catch(e) {}
     }
     
-    // ======================= RE-RENDER ON COLUMN CHANGE (preserve data) =======================
-    function refreshLayoutPreserveData() {
-        if (currentHosts && currentHosts.length > 0) {
-            // Re-render to maintain proper terminal references after column change
-            // but keep existing ping data? easier: re-render fresh but keep host list
-            // However we need to preserve terminal logs: we'll store logs per IP and replay?
-            // Better: just re-render UI but the terminalRefs will be new; old logs vanish but that's acceptable tradeoff
-            // To avoid losing logs, we would need complex buffer, but for simplicity just re-render.
-            // But we can backup old logs? for better UX, we soft-render without clearing important stream? Actually terminal logs are transient, refresh is fine.
-            renderHosts(currentHosts);
-        }
-    }
-    
-    // override setColumns to also refresh if needed (optional but keeps consistency)
-    const originalSetColumns = setColumns;
-    setColumns = function(cols) {
-        originalSetColumns(cols);
-        // re-apply grid template to existing container (already done in original)
-        // but if we want to keep data consistent, no need to re-render hosts.
-        // However DOM structure unchanged, good.
-    };
-    
-    // Enhance setColumns to preserve host data after column change
-    const superSetColumns = (cols) => {
-        if (cols < 1) cols = 1;
-        if (cols > 6) cols = 6;
-        currentColumns = cols;
-        dashboardContainer.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
-        colButtons.forEach(btn => {
-            const val = parseInt(btn.getAttribute('data-col'));
-            btn.classList.toggle('active', val === cols);
-        });
-        localStorage.setItem('PingCentral_columns', cols);
-    };
-    
-    // Override original
-    window.setColumns = superSetColumns;
-    // Rebind column buttons
-    function bindColumnButtons() {
-        colButtons.forEach(btn => {
-            btn.removeEventListener('click', () => {});
-            btn.addEventListener('click', (e) => {
-                const cols = parseInt(btn.getAttribute('data-col'));
-                if (!isNaN(cols)) superSetColumns(cols);
-            });
-        });
-    }
-    
-    // ======================= INIT =======================
     function init() {
         setupAlarmToggle();
-        bindColumnButtons();
-        // load saved columns after buttons bound
-        const savedCols = localStorage.getItem('PingCentral_columns');
-        if (savedCols) {
-            const c = parseInt(savedCols);
-            if (c >= 1 && c <= 6) superSetColumns(c);
-        } else {
-            superSetColumns(3);
-        }
-        
-        // audio init with user unlock
+        setupColumnButtons();
+        initTerminalHeightControl();  // NEW: terminal height input & persistence
         initAudio();
         setupAudioUnlock();
-        window.addEventListener('resize', () => {
-            currentHosts.forEach(host => drawPingGraph(host.IPaddress));
-            updateHostModal();
-        });
-        
-        // connect WebSocket
+        window.addEventListener('resize', () => { currentHosts.forEach(host => drawPingGraph(host.IPaddress)); updateHostModal(); });
         connectWebSocket();
-        
-        // Optional: periodic reconnect health check
-        setInterval(() => {
-            if (socket && socket.readyState !== WebSocket.OPEN && socket.readyState !== WebSocket.CONNECTING) {
-                if (reconnectAttempts < MAX_RECONNECT) {
-                    connectWebSocket();
-                }
-            }
-        }, 5000);
+        setInterval(() => { if(socket && socket.readyState !== WebSocket.OPEN && socket.readyState !== WebSocket.CONNECTING && reconnectAttempts < MAX_RECONNECT) connectWebSocket(); }, 5000);
     }
-    
     init();
 </script>
 </body>
